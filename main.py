@@ -13,26 +13,29 @@ def main(config, args):
         config = json.load(f)
 
         if len(args) > 0:
-            statement = config["sql"].format(*args)
+            config['statement'] = config["sql"].format(*args)
         else:
-            statement = config["sql"]
+            config['statement'] = config["sql"]
 
-        for rec in fetch_rows(config["host"], config["port"], config["user"], config["password"],
-                              config["schema"], statement, config["columns"]):
+        for rec in fetch_rows(**config):
             print(rec)
 
 
-def fetch_rows(host="127.0.0.1", port=3306, user="root", passwd="", db='mysql',
-               statement="SELECT now() as server_time", columns=['server_time']):
-    db = pymysql.connect(host=host, port=port, user=user, passwd=passwd, db=db, charset='utf8')
+def fetch_rows(**kwargs):
+    db = pymysql.connect(host=kwargs['host'],
+                         port=kwargs['port'],
+                         user=kwargs['user'],
+                         passwd=kwargs['password'],
+                         db=kwargs['schema'],
+                         charset='utf8')
     try:
         cursor = db.cursor()
-        cursor.execute(statement)
+        cursor.execute(kwargs['statement'])
         results = cursor.fetchall()
 
         for row in results:
             record = {}
-            for i, n in enumerate(columns):
+            for i, n in enumerate(kwargs['columns']):
                 record[n] = row[i]
             yield record
     finally:
