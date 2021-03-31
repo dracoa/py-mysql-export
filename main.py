@@ -1,73 +1,38 @@
 # This is a sample Python script.
 import json
 import logging
-from abc import ABC, abstractmethod
 
 import click
-import pymysql
+from pandas import read_sql_query
+from sqlalchemy import create_engine
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 
-class Exporter(ABC):
-    @abstractmethod
-    def insert(self, rec):
-        pass
-
-    @abstractmethod
-    def export(self):
-        return
-
-
-class JsonExporter(Exporter):
-    def __init__(self):
-        self.list = []
-
-    def insert(self, rec):
-        self.list.append(rec)
-
-    def export(self):
-        return json.dumps(self.list)
-
-
 @click.command()
-@click.option('--config', default="./config.json", help='Path of config file')
-@click.option('--args', help='Args in sql statement')
-def main(config, args):
-    with open(config, "r") as f:
+@click.option('--config', default='./config.json', help='Path of config file')
+@click.option('--name', default='./export', help='Output file name, without extension')
+@click.argument('args', nargs=-1)
+def main(config, name, args):
+    with open(config, 'r') as f:
         config = json.load(f)
-        if args is not None:
-            config['args'] = args.split(",")
+        logging.info('Configuration loaded from: {}'.format(config))
+        engine = create_engine(config['connection_str'])
+        params = dict(arg.split('=') for arg in args)
+        logging.info('Prepare to execute SQL: {}'.format(config['sql']))
+        logging.info('Parameters: {}'.format(params))
+        df = read_sql_query(config['sql'], engine, params=params)
+        logging.info('{} records loaded into Dataframe'.format(len(df)))
+        if config['format'] == 'h5':
+            df.to_hdf(name + '.h5', key='mysql', mode='w')
+        elif config['format'] == 'csv':
+            df.to_csv(name + '.csv')
         else:
-            config['args'] = []
-        exporter = JsonExporter()
-        for rec in fetch_rows(**config):
-            exporter.insert(rec)
-        done = exporter.export()
-        print(done)
+            d = df.to_dict('records')
+            with open(name + '.json', 'w') as outfile:
+                json.dump(d, outfile)
 
-
-def fetch_rows(**kwargs):
-    db = pymysql.connect(host=kwargs['host'],
-                         port=kwargs['port'],
-                         user=kwargs['user'],
-                         passwd=kwargs['password'],
-                         db=kwargs['schema'],
-                         charset='utf8',
-                         cursorclass=pymysql.cursors.DictCursor)
-    try:
-        cursor = db.cursor()
-        logging.info('connected to database...')
-        logging.info('execute sql: {}'.format(kwargs['sql']))
-        logging.info('sql args: {}'.format(kwargs['args']))
-        num = cursor.execute(kwargs['sql'], kwargs['args'])
-        results = cursor.fetchall()
-        logging.info('fetched {} rows'.format(num))
-        for row in results:
-            yield row
-    finally:
-        db.close()
-        logging.info('database disconnected')
+        logging.info('Exported in {} format with path {}'.format(config['format'], name))
 
 
 # Press the green button in the gutter to run the script.

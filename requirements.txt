@@ -1,2 +1,5 @@
 PyMySQL
+sqlalchemy
+pandas
 click
+tables
