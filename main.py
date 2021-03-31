@@ -32,11 +32,15 @@ def fetch_rows(**kwargs):
         cursor = db.cursor()
         cursor.execute(kwargs['statement'])
         results = cursor.fetchall()
+        col_def = {}
+
+        for i, c in enumerate(cursor.description):
+            col_def[c[0]] = i
 
         for row in results:
             record = {}
             for i, n in enumerate(kwargs['columns']):
-                record[n] = row[i]
+                record[n] = row[col_def[n]]
             yield record
     finally:
         db.close()
